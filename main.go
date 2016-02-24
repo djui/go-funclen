@@ -18,7 +18,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [PATH]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintf(os.Stderr, "Print length of all functions in PATH.\n")
+		fmt.Fprintf(os.Stderr, "Print a list of all Go functions and their body length recursively in the given directory PATH.\n")
 	}
 
 	flag.Parse()

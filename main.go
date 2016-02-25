@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func main() {
@@ -48,6 +45,19 @@ func run(root string) {
 	}
 }
 
+type FoundFunc func(sig *FuncSig)
+
+type FuncFinder struct {
+	fset  *token.FileSet
+	found FoundFunc
+}
+
+type FuncToken struct {
+	Pos  token.Pos
+	Body *ast.BlockStmt
+	Name string
+}
+
 type FuncSig struct {
 	loc string
 	sig string
@@ -56,13 +66,6 @@ type FuncSig struct {
 
 func (f *FuncSig) String() string {
 	return fmt.Sprintf("%s: %d %s", f.loc, f.len, f.sig)
-}
-
-type FoundFunc func(sig *FuncSig)
-
-type FuncFinder struct {
-	fset  *token.FileSet
-	found FoundFunc
 }
 
 func NewFuncFinder(found FoundFunc) *FuncFinder {
@@ -104,7 +107,7 @@ func (f *FuncFinder) parsePackages(pkgs map[string]*ast.Package) error {
 	return nil
 }
 
-func (f *FuncFinder) parseFile(file *ast.File) error {
+func (f *FuncFinder) parseFile(file ast.Node) error {
 	var err error
 
 	inspector := func(n ast.Node) bool {
@@ -113,15 +116,11 @@ func (f *FuncFinder) parseFile(file *ast.File) error {
 		default:
 			return true
 		case *ast.FuncDecl:
-			funcToken = &FuncToken{Pos: fn.Pos(), Body: fn.Body, Identity: fn}
+			funcToken = &FuncToken{Pos: fn.Pos(), Body: fn.Body, Name: fn.Name.String()}
 		case *ast.FuncLit:
-			funcToken = &FuncToken{Pos: fn.Pos(), Body: fn.Body, Identity: fn}
+			funcToken = &FuncToken{Pos: fn.Pos(), Body: fn.Body, Name: "(anonymous)"}
 		}
-		sig, err := f.parseFunc(funcToken)
-		if err != nil {
-			return false
-		}
-		f.found(sig)
+		f.found(f.parseFunc(funcToken))
 		return true
 	}
 
@@ -129,31 +128,16 @@ func (f *FuncFinder) parseFile(file *ast.File) error {
 	return err
 }
 
-type FuncToken struct {
-	Pos      token.Pos
-	Body     *ast.BlockStmt
-	Identity interface{}
-}
-
-func (f *FuncFinder) parseFunc(fn *FuncToken) (*FuncSig, error) {
+func (f *FuncFinder) parseFunc(fn *FuncToken) *FuncSig {
 	loc := f.fset.Position(fn.Pos).String()
-
-	len, err := f.funcLen(fn)
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := f.funcSignature(fn)
-	if err != nil {
-		return nil, err
-	}
-
-	return &FuncSig{loc, sig, len}, nil
+	len := f.funcLen(fn)
+	sig := fn.Name
+	return &FuncSig{loc, sig, len}
 }
 
-func (f *FuncFinder) funcLen(fn *FuncToken) (int, error) {
-	if fn.Body == nil { // forward declaration
-		return 0, nil
+func (f *FuncFinder) funcLen(fn *FuncToken) int {
+	if fn.Body == nil {
+		return 0 // forward declaration
 	}
 
 	sLine := f.fset.Position(fn.Body.Pos()).Line
@@ -162,45 +146,8 @@ func (f *FuncFinder) funcLen(fn *FuncToken) (int, error) {
 	if bodyLen == 0 {
 		// Assuming at least one statement was on same line: "func() { stmt }"
 		// which is incorrect for e.g. "func() {}".
-		return 1, nil
-	}
-	return bodyLen, nil
-}
-
-func (f *FuncFinder) funcSignature(fn *FuncToken) (string, error) {
-	funcString, err := sprintNode(fn.Identity, f.fset)
-	if err != nil {
-		return "", err
+		return 1
 	}
 
-	if fn.Body == nil { // forward declaration
-		return cleanSignature(funcString), nil
-	}
-
-	// FIXME(uwe): I can't explain this, but somehow the sig vs body position is
-	// influenced by tabs. And I assume replacing it with 1x8+1 spaces makes it
-	// work?!
-	funcString = strings.Replace(funcString, "\t", "         ", -1)
-
-	sigLen := int(fn.Body.Pos() - fn.Pos)
-	// FIXME(uwe): This should also not happen...
-	if sigLen > len(funcString) {
-		sigLen = len(funcString)
-	}
-
-	return cleanSignature(funcString[:sigLen]), nil
-}
-
-func sprintNode(node interface{}, fset *token.FileSet) (string, error) {
-	var buf bytes.Buffer
-	p := &printer.Config{Tabwidth: 4}
-	err := p.Fprint(&buf, fset, node)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-func cleanSignature(signature string) string {
-	return strings.TrimSpace(strings.TrimPrefix(signature, "func"))
+	return bodyLen
 }

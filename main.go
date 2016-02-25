@@ -55,7 +55,7 @@ type FuncSig struct {
 }
 
 func (f *FuncSig) String() string {
-	return fmt.Sprintf("% 4d %s %s", f.len, f.loc, f.sig)
+	return fmt.Sprintf("%s: %d %s", f.loc, f.len, f.sig)
 }
 
 type FoundFunc func(sig *FuncSig)

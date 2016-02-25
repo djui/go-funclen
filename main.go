@@ -167,8 +167,6 @@ func (f *FuncFinder) funcLen(fn *FuncToken) (int, error) {
 	return bodyLen, nil
 }
 
-const funcPrefixLen = len("func")
-
 func (f *FuncFinder) funcSignature(fn *FuncToken) (string, error) {
 	funcString, err := sprintNode(fn.Identity, f.fset)
 	if err != nil {
@@ -176,7 +174,7 @@ func (f *FuncFinder) funcSignature(fn *FuncToken) (string, error) {
 	}
 
 	if fn.Body == nil { // forward declaration
-		return funcString[funcPrefixLen:], nil
+		return cleanSignature(funcString), nil
 	}
 
 	// FIXME(uwe): I can't explain this, but somehow the sig vs body position is
@@ -190,8 +188,7 @@ func (f *FuncFinder) funcSignature(fn *FuncToken) (string, error) {
 		sigLen = len(funcString)
 	}
 
-	sig := strings.TrimSpace(funcString[funcPrefixLen:sigLen])
-	return sig, nil
+	return cleanSignature(funcString[:sigLen]), nil
 }
 
 func sprintNode(node interface{}, fset *token.FileSet) (string, error) {
@@ -202,4 +199,8 @@ func sprintNode(node interface{}, fset *token.FileSet) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func cleanSignature(signature string) string {
+	return strings.TrimSpace(strings.TrimPrefix(signature, "func"))
 }

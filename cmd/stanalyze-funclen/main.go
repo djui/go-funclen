@@ -11,22 +11,24 @@ import (
 )
 
 func main() {
-	root := "."
-
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [PATH]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintf(os.Stderr, "Print a list of all Go functions and their body length recursively in the given directory PATH.\n")
+		fmt.Fprintf(os.Stderr, `Usage: %s [PATH]
+Print a list of all Go functions and their body length recursively in the given
+directory PATH.
+`, filepath.Base(os.Args[0]))
 	}
 
 	flag.Parse()
-	if flag.NArg() == 1 {
-		root = flag.Arg(0)
-	} else if flag.NArg() > 1 {
+
+	switch flag.NArg() {
+	case 0:
+		run(".")
+	case 1:
+		run(flag.Arg(0))
+	default:
 		flag.Usage()
 		os.Exit(1)
 	}
-
-	run(root)
 }
 
 func run(root string) {

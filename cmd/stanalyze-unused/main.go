@@ -82,13 +82,11 @@ func visitDirs(path string, fi os.FileInfo, err error) error {
 	if err != nil {
 		return err
 	}
-
 	if fi.IsDir() {
 		if err := parsePath(path); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -97,43 +95,58 @@ func parsePath(path string) error {
 	if err != nil {
 		return err
 	}
-
 	return parsePackages(pkgs)
 }
 
 func parsePackages(pkgs map[string]*ast.Package) error {
-	for _, pkg := range pkgs {
-		for _, file := range pkg.Files {
-			if err := parseFile(file); err != nil {
-				return err
-			}
+	for k, pkg := range pkgs {
+		fmt.Println(k)
+		if err := parseFiles(pkg.Files); err != nil {
+			return err
 		}
 	}
-
 	return nil
 }
 
-func parseFile(root ast.Node) error {
+func parseFiles(files map[string]*ast.File) error {
+	for _, file := range files {
+		if err := parseFile(file); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseFile(file *ast.File) error {
 	var err error
 
 	inspector := func(n ast.Node) bool {
 		consts := collectConsts(n)
 		for _, c := range consts {
-			fmt.Printf("%s\n", c)
+			fmt.Printf("%v\n", c)
 		}
 		return true
 	}
 
-	ast.Inspect(root, inspector)
+	ast.Inspect(file, inspector)
 	return err
 }
 
-func collectConsts(n ast.Node) []string {
+type constRef struct {
+	name         string
+	pkg          string
+	usesInternal int
+	usesExternal int
+}
+
+func collectConsts(n ast.Node) map[string]*constRef {
 	// TODO: Return package name as well: {pkg, name}
-	var consts []string
+	consts := map[string]*constRef{}
 	if d, ok := n.(*ast.GenDecl); ok && d.Tok == token.CONST {
 		for _, s := range d.Specs {
-			consts = append(consts, s.(*ast.ValueSpec).Names[0].Name)
+			constName := s.(*ast.ValueSpec).Names[0].Name
+			constPkg := "" // fset.Position(n.Pos()).
+			consts[constName] = &constRef{name: constName, pkg: constPkg}
 		}
 	}
 	return consts
